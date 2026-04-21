@@ -9,17 +9,21 @@ NULL
 #' @importFrom spatstat.geom crosspairs
 #' @importFrom data.table data.table setcolorder
 #' @importFrom spatstat.explore edge.Ripley
-table_construct <- function(X, Z){
+table_construct <- function(X, Z) {
   N_tau_W <- Z$n
   Neighbours <- crosspairs(X, Z, rmax = Inf)
   Z_dt <- data.table(v_x = Z$x, v_y = Z$y, Z_v = Z$marks)
-  info_dt <- data.table(u_x = Neighbours$xi, u_y = Neighbours$yi,
-                        v_x = Neighbours$xj, v_y = Neighbours$yj,
-                        dist = Neighbours$d)
+  info_dt <- data.table(
+    u_x = Neighbours$xi,
+    u_y = Neighbours$yi,
+    v_x = Neighbours$xj,
+    v_y = Neighbours$yj,
+    dist = Neighbours$d
+  )
   info_dt <- merge(info_dt, Z_dt, by = c("v_x", "v_y"))
   setcolorder(info_dt, c("u_x", "u_y", "v_x", "v_y", "Z_v", "dist"))
-  info_dt[
-    ,e:=edge.Ripley(X = ppp(x = v_x, y = v_y, window = X$window), r = dist)
+  info_dt[,
+    e := edge.Ripley(X = ppp(x = v_x, y = v_y, window = X$window), r = dist)
   ]
   return(info_dt)
 }
@@ -45,59 +49,68 @@ hatc0 <- function(info_dt, X, Z, r, b){
 }
 
 #' @importFrom EstimationTools gauss_quad
-Mise_est <- function(info_dt, X, Z, b, R){
+Mise_est <- function(info_dt, X, Z, b, R) {
   info_dt_R <- info_dt[dist < R]
   info_dt_R <- info_dt_R[order(dist)]
   N_tau <- Z$n
-  lambda <- X$n/area(X$window)
+  lambda <- X$n / area(X$window)
 
-  idx_dist_pairs <- Index_selection(as.matrix(info_dt_R[,c(1:4,6)]), b)
-  idx_dist_pairs <- lapply(1:length(idx_dist_pairs),
-                           function(i) list(dist = info_dt_R$dist[i],
-                                            idx = idx_dist_pairs[[i]]))
+  idx_dist_pairs <- Index_selection(as.matrix(info_dt_R[, c(1:4, 6)]), b)
+  idx_dist_pairs <- lapply(1:length(idx_dist_pairs), function(i) {
+    list(dist = info_dt_R$dist[i], idx = idx_dist_pairs[[i]])
+  })
 
   # Caluclate the terms in the sum to estimate c0 for each dist
-  a <- Sys.time()
   c0_sum_terms <- lapply(
     idx_dist_pairs,
-    function(x){
-      info_dt_R$Z_v[x$idx]*k_b(x$dist-info_dt_R$dist[x$idx], b)*
-        info_dt_R$e[x$idx]/(lambda*2*pi*x$dist)
+    function(x) {
+      info_dt_R$Z_v[x$idx] *
+        k_b(x$dist - info_dt_R$dist[x$idx], b) *
+        info_dt_R$e[x$idx] /
+        (lambda * 2 * pi * x$dist)
     }
   )
-  Sys.time()-a
-  rm(idx_dist_pairs); gc()
+  rm(idx_dist_pairs)
+  gc()
 
   # sum over all terms to esimate c0^-(u,v)(||u-v||) for every point-pair (u,v)
   c0_cv_list <- lapply(c0_sum_terms, sum)
-  c0_cv <- unlist(c0_cv_list)/N_tau
-  rm(c0_sum_terms); gc()
+  c0_cv <- unlist(c0_cv_list) / N_tau
+  rm(c0_sum_terms)
+  gc()
 
-  info_dt_R[,c0_cv:=c0_cv]
-  Mise_term2 <- sum(info_dt_R$Z_v*info_dt_R$e*info_dt_R$c0_cv/lambda)/N_tau
+  info_dt_R[, c0_cv := c0_cv]
+  Mise_term2 <- sum(info_dt_R$Z_v * info_dt_R$e * info_dt_R$c0_cv / lambda) /
+    N_tau
 
   # Quadrature for term 1
-  hatc <- function(info_dt, X, Z, r, b){
+  hatc <- function(info_dt, X, Z, r, b) {
     sapply(r, function(x) hatc0(info_dt, X, Z, x, b))
   }
 
-  hatcsq <- function(r){
-    return(hatc(info_dt, X, Z, r, b)^2*r)
+  hatcsq <- function(r) {
+    return(hatc(info_dt, X, Z, r, b)^2 * r)
   }
 
   Mise_term1 <- gauss_quad(
     fun = hatcsq,
-    lower = 0, upper = R
+    lower = 0,
+    upper = R
   )
 
-  return(Mise_term1 - 2*Mise_term2)
+  return(Mise_term1 - 2 * Mise_term2)
 }
 
-bandwidth_selection <- function(info_dt, X, Z, R){
+bandwidth_selection <- function(info_dt, X, Z, R) {
   MISE_est_fct <- function(b) Mise_est(info_dt, X, Z, b, R)
 
-  O <- optim(par = 0.5, fn = MISE_est_fct, lower = 0, upper = 1,
-             method = "L-BFGS-B")
+  O <- optim(
+    par = 0.5,
+    fn = MISE_est_fct,
+    lower = 0,
+    upper = 1,
+    method = "L-BFGS-B"
+  )
 
   b <- O$par
 }
