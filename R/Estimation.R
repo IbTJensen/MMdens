@@ -2,6 +2,10 @@
 k <- function(r) ifelse(abs(r) < 1, 3/4*(1-r^2), 0)
 k_b <- function(r, b) ifelse(abs(r) < b, k(r/b)/b, 0)
 
+# Transformations
+expit_R <- function(x, R) R*(1/(1+exp(-x)))
+logit_R <- function(x, R) log(x/(R-x))
+
 #' @importFrom Rcpp sourceCpp
 #' @useDynLib MMdens, .registration = TRUE
 NULL
@@ -102,9 +106,6 @@ Mise_est <- function(info_dt, X, Z, b, R) {
 }
 
 bandwidth_selection_optim <- function(info_dt, X, Z, R, b_init = NULL) {
-  expit_R <- function(x, R) R*(1/(1+exp(-x)))
-  logit_R <- function(x, R) log(x/(R-x))
-  
   MISE_est_fct <- function(b) Mise_est(info_dt, X, Z, b = expit_R(b, R), R)
 
   O <- optim(
