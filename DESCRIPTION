@@ -1,4 +1,4 @@
-Package: SpatialCovariance
+Package: MMdens
 Type: Package
 Title: Estimation of Covariance Between Point Processes and Spatial Covariates
 Version: 0.1.0
