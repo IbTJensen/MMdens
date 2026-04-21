@@ -2,6 +2,6 @@
 # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
 
 Index_selection <- function(A, b) {
-    .Call('_SpatialCovariance_Index_selection', PACKAGE = 'SpatialCovariance', A, b)
+    .Call(`_SpatialCovariance_Index_selection`, A, b)
 }
 
