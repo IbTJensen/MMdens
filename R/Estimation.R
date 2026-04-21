@@ -148,6 +148,10 @@ bandwidth_selection_grid <- function(info_dt, X, Z, R, grid) {
 #' bandwidth (b).
 #' @export
 SpatCovarEst <- function(X, Z, R, r, b_init = NULL, grid = NULL){
+  if(!is.null(b_init) & !is.null(grid)){
+    stop("If b_init is non-null, then grid must be NULL and vice-versa")
+  }
+
   info_dt <- table_construct(X, Z)
   if(is.null(grid)){
     b <- bandwidth_selection_optim(info_dt, X, Z, R, b_init)
