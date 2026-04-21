@@ -101,18 +101,27 @@ Mise_est <- function(info_dt, X, Z, b, R) {
   return(Mise_term1 - 2 * Mise_term2)
 }
 
-bandwidth_selection <- function(info_dt, X, Z, R) {
-  MISE_est_fct <- function(b) Mise_est(info_dt, X, Z, b, R)
+bandwidth_selection_optim <- function(info_dt, X, Z, R, b_init = NULL) {
+  expit_R <- function(x, R) R*(1/(1+exp(-x)))
+  logit_R <- function(x, R) log(x/(R-x))
+  
+  MISE_est_fct <- function(b) Mise_est(info_dt, X, Z, b = expit_R(b, R), R)
 
   O <- optim(
-    par = 0.5,
+    par = ifelse(is.null(b_init), 0, b_init), # Note that logit_R(0) = R/2
     fn = MISE_est_fct,
-    lower = 0,
-    upper = 1,
-    method = "L-BFGS-B"
+    method = "Nelder-Mead"
   )
 
-  b <- O$par
+  b <- logit_R(O$par)
+}
+
+bandwidth_selection_grid <- function(info_dt, X, Z, R, grid) {
+  stopifnot(class(grid) %in% c("numeric", "double", "integer"))
+  grid_search <- lapply(grid, function(b) Mise_est(info_dt, X, Z, b, R))
+  grid_search <- unlist(grid_search)
+  best_idx <- which.min(grid_search)
+  grid[best_idx]
 }
 
 #' Estimates covariance between point pattern and spatial covariance with
@@ -126,13 +135,24 @@ bandwidth_selection <- function(info_dt, X, Z, R) {
 #' is used to calculate the Mean Integrated Squared Error (MISE) used for
 #' bandwidth selection. Must be a positive number.
 #' @param r Vector of distance(s) for which to esimate the spatial covariance.
+#' @param b_init Initial value for bandwidth b. By default R/2 will be used. If
+#' grid is set, then b_init must be NULL
+#' @param grid Grid to evaulate the MISE over. The bandwidth with the lowest MISE
+#' will then be selected for the mixed moment estimator. If set to NULL the MISE
+#' is found with numeric optimsation optimised. Using grid can sometimes save 
+#' considerable computational resources, but unless this is relevant consideration,
+#' it is recommended to leave grid = NULL. 
 #' @return Returns a list containing the estimated covariances (c0), the
 #' distances at which the covariances are estimated (r), and the selected
 #' bandwidth (b).
 #' @export
-SpatCovarEst <- function(X, Z, R, r){
+SpatCovarEst <- function(X, Z, R, r, b_init = NULL, grid = NULL){
   info_dt <- table_construct(X, Z)
-  b <- bandwidth_selection(info_dt, X, Z, R)
+  if(is.null(grid)){
+    b <- bandwidth_selection_optim(info_dt, X, Z, R, b_init)
+  } else{
+    b <- bandwidth_selection_grid(info_dt, X, Z, R, grid)
+  }
   if(length(r) == 1){
     c0 <- hatc0(info_dt, X, Z, r, b)
   }
