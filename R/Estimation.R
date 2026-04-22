@@ -115,24 +115,24 @@ bandwidth_selection_optim <- function(info_dt, X, Z, R, b_init = NULL) {
   MISE_est_fct <- function(b) Mise_est(info_dt, X, Z, b = b, R)
   # MISE_est_fct <- function(b) Mise_est(info_dt, X, Z, b = expit_R(b, R), R)
 
-  O <- optim(
-    par = ifelse(is.null(b_init), R/2, b_init), # Note that logit_R(0) = R/2
-    # par = ifelse(is.null(b_init), 0, b_init), # Note that logit_R(0) = R/2
-    fn = MISE_est_fct,
-    lower = 0,
-    upper = R,
-    method = "Brent"
-  )
-
-  # O <- optimise(
-  #   f = MISE_est_fct,
-  #   interval = c(0, R),
-  #   maximum = FALSE
+  # O <- optim(
+  #   par = ifelse(is.null(b_init), R/2, b_init), # Note that logit_R(0) = R/2
+  #   # par = ifelse(is.null(b_init), 0, b_init), # Note that logit_R(0) = R/2
+  #   fn = MISE_est_fct,
+  #   lower = 0,
+  #   upper = R,
+  #   method = "Brent"
   # )
 
+  O <- optimise(
+    f = MISE_est_fct,
+    interval = c(0, R),
+    maximum = FALSE
+  )
+
   # b <- logit_R(O$par, R)
-  b <- O$par
-  # b <- O$minimum
+  # b <- O$par
+  b <- O$minimum
 }
 
 bandwidth_selection_grid <- function(info_dt, X, Z, R, grid) {
