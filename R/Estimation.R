@@ -115,24 +115,24 @@ bandwidth_selection_optim <- function(info_dt, X, Z, R, b_init = NULL) {
   MISE_est_fct <- function(b) Mise_est(info_dt, X, Z, b = b, R)
   # MISE_est_fct <- function(b) Mise_est(info_dt, X, Z, b = expit_R(b, R), R)
 
-  # O <- optim(
-  #   par = ifelse(is.null(b_init), R/2, b_init), # Note that logit_R(0) = R/2
-  #   # par = ifelse(is.null(b_init), 0, b_init), # Note that logit_R(0) = R/2
-  #   fn = MISE_est_fct,
-  #   lower = 0,
-  #   upper = R,
-  #   method = "Brent"
-  # )
-
-  O <- optimise(
-    f = MISE_est_fct,
-    interval = c(0, R),
-    maximum = FALSE
-  )
-
-  # b <- logit_R(O$par, R)
-  # b <- O$par
-  b <- O$minimum
+  if (!is.null(b_init)) {
+    O <- optim(
+      par = b_init,
+      # par = ifelse(is.null(b_init), 0, b_init), # Note that logit_R(0) = R/2
+      fn = MISE_est_fct,
+      lower = 0,
+      upper = R,
+      method = "Brent"
+    )
+    return(O$par)
+  } else {
+    O <- optimise(
+      f = MISE_est_fct,
+      interval = c(0, R),
+      maximum = FALSE
+    )
+    return(O$minimum)
+  }
 }
 
 bandwidth_selection_grid <- function(info_dt, X, Z, R, grid) {
@@ -158,24 +158,48 @@ bandwidth_selection_grid <- function(info_dt, X, Z, R, grid) {
 #' R/2 is used. If Grid is non-NULL, b_init should be left as NULL.
 #' @param grid Grid to evaulate the MISE over. The bandwidth with the lowest MISE
 #' will then be selected for the mixed moment estimator. If set to NULL the MISE
-#' is found with numeric optimsation optimised. Using grid can sometimes save 
+#' is found with numeric optimsation optimised. Using grid can sometimes save
 #' considerable computational resources, but unless this is relevant consideration,
-#' it is recommended to leave grid = NULL. 
+#' it is recommended to leave grid = NULL.
 #' @return Returns a list containing the estimated covariances (c0), the
 #' distances at which the covariances are estimated (r), and the selected
 #' bandwidth (b).
 #' @export
-SpatCovarEst <- function(X, Z, R, r, b_init = NULL, grid = NULL){
+SpatCovarEst <- function(X, Z, R, r, b_init = NULL, grid = NULL) {
+  if (class(X) != "ppp" | class(Z) != "ppp") {
+    stop("X and Z must be a spatstat ppp class")
+  }
+
+  if (!(class(b_init) %in% c("NULL", "numeric", "double", "integer"))) {
+    stop("b_init must be either NULL or a number")
+  }
+
+  if (!is.null(b_init)) {
+    if (b_init <= 0 | b_init > R) {
+      stop("b_init must be between 0 and R")
+    }
+  }
+
+  if (!(class(grid) %in% c("NULL", "numeric", "double", "integer"))) {
+    stop("grid must be either NULL or a vector of numbers")
+  }
+
+  if (!is.null(grid)) {
+    if (min(grid) <= 0 | max(grid) > R) {
+      stop("All elements in grid must be between 0 and R")
+    }
+  }
+
   info_dt <- table_construct(X, Z)
-  if(is.null(grid)){
+  if (is.null(grid)) {
     b <- bandwidth_selection_optim(info_dt, X, Z, R, b_init)
-  } else{
+  } else {
     b <- bandwidth_selection_grid(info_dt, X, Z, R, grid)
   }
-  if(length(r) == 1){
+  if (length(r) == 1) {
     c0 <- hatc0(info_dt, X, Z, r, b)
   }
-  if(length(r) > 1){
+  if (length(r) > 1) {
     c0 <- sapply(r, function(x) hatc0(info_dt, X, Z, x, b))
   }
   out <- list(c0 = c0, r = r, b = b)
