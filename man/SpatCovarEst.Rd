@@ -6,7 +6,7 @@
 a kernel estimation procedure. Bandwidth selection is employed to selecet
 the optimal bandwidth.}
 \usage{
-SpatCovarEst(X, Z, R, r)
+SpatCovarEst(X, Z, R, r, b_init = NULL, grid = NULL)
 }
 \arguments{
 \item{X}{A point pattern represented by a ppp object.}
@@ -20,6 +20,15 @@ is used to calculate the Mean Integrated Squared Error (MISE) used for
 bandwidth selection. Must be a positive number.}
 
 \item{r}{Vector of distance(s) for which to esimate the spatial covariance.}
+
+\item{b_init}{Initial value for optimisation of the bandwidth. If left empty,
+R/2 is used. If Grid is non-NULL, b_init should be left as NULL.}
+
+\item{grid}{Grid to evaulate the MISE over. The bandwidth with the lowest MISE
+will then be selected for the mixed moment estimator. If set to NULL the MISE
+is found with numeric optimsation optimised. Using grid can sometimes save 
+considerable computational resources, but unless this is relevant consideration,
+it is recommended to leave grid = NULL.}
 }
 \value{
 Returns a list containing the estimated covariances (c0), the

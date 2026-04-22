@@ -1,10 +1,17 @@
 # Kernels
 k <- function(r) ifelse(abs(r) < 1, 3/4*(1-r^2), 0)
-k_b <- function(r, b) ifelse(abs(r) < b, k(r/b)/b, 0)
+# k_b <- function(r, b) ifelse(b == 0, Inf, ifelse(abs(r) < b, k(r / b) / b, 0))
+k_b <- function(r, b) {
+  if (b == 0) {
+    return(rep(Inf, length(r)))
+  } else {
+    return(ifelse(r < b, k(r / b) / b, 0))
+  }
+}
 
-# Transformations
-expit_R <- function(x, R) R*(1/(1+exp(-x)))
-logit_R <- function(x, R) log(x/(R-x))
+# # Transformations
+# expit_R <- function(x, R) R*(1/(1+exp(-x)))
+# logit_R <- function(x, R) log(x/(R-x))
 
 #' @importFrom Rcpp sourceCpp
 #' @useDynLib MMdens, .registration = TRUE
@@ -84,8 +91,7 @@ Mise_est <- function(info_dt, X, Z, b, R) {
   gc()
 
   info_dt_R[, c0_cv := c0_cv]
-  Mise_term2 <- sum(info_dt_R$Z_v * info_dt_R$e * info_dt_R$c0_cv / lambda) /
-    N_tau
+  Mise_term2 <- sum(info_dt_R$Z_v * info_dt_R$e * info_dt_R$c0_cv / lambda) / N_tau
 
   # Quadrature for term 1
   hatc <- function(info_dt, X, Z, r, b) {
@@ -106,15 +112,27 @@ Mise_est <- function(info_dt, X, Z, b, R) {
 }
 
 bandwidth_selection_optim <- function(info_dt, X, Z, R, b_init = NULL) {
-  MISE_est_fct <- function(b) Mise_est(info_dt, X, Z, b = expit_R(b, R), R)
+  MISE_est_fct <- function(b) Mise_est(info_dt, X, Z, b = b, R)
+  # MISE_est_fct <- function(b) Mise_est(info_dt, X, Z, b = expit_R(b, R), R)
 
   O <- optim(
-    par = ifelse(is.null(b_init), 0, b_init), # Note that logit_R(0) = R/2
+    par = ifelse(is.null(b_init), R/2, b_init), # Note that logit_R(0) = R/2
+    # par = ifelse(is.null(b_init), 0, b_init), # Note that logit_R(0) = R/2
     fn = MISE_est_fct,
-    method = "Nelder-Mead"
+    lower = 0,
+    upper = R,
+    method = "Brent"
   )
 
-  b <- logit_R(O$par)
+  # O <- optimise(
+  #   f = MISE_est_fct,
+  #   interval = c(0, R),
+  #   maximum = FALSE
+  # )
+
+  # b <- logit_R(O$par, R)
+  b <- O$par
+  # b <- O$minimum
 }
 
 bandwidth_selection_grid <- function(info_dt, X, Z, R, grid) {
@@ -136,8 +154,8 @@ bandwidth_selection_grid <- function(info_dt, X, Z, R, grid) {
 #' is used to calculate the Mean Integrated Squared Error (MISE) used for
 #' bandwidth selection. Must be a positive number.
 #' @param r Vector of distance(s) for which to esimate the spatial covariance.
-#' @param b_init Initial value for bandwidth b. By default R/2 will be used. If
-#' grid is set, then b_init must be NULL
+#' @param b_init Initial value for optimisation of the bandwidth. If left empty,
+#' R/2 is used. If Grid is non-NULL, b_init should be left as NULL.
 #' @param grid Grid to evaulate the MISE over. The bandwidth with the lowest MISE
 #' will then be selected for the mixed moment estimator. If set to NULL the MISE
 #' is found with numeric optimsation optimised. Using grid can sometimes save 
@@ -148,10 +166,6 @@ bandwidth_selection_grid <- function(info_dt, X, Z, R, grid) {
 #' bandwidth (b).
 #' @export
 SpatCovarEst <- function(X, Z, R, r, b_init = NULL, grid = NULL){
-  if(!is.null(b_init) & !is.null(grid)){
-    stop("If b_init is non-null, then grid must be NULL and vice-versa")
-  }
-
   info_dt <- table_construct(X, Z)
   if(is.null(grid)){
     b <- bandwidth_selection_optim(info_dt, X, Z, R, b_init)
