@@ -40,7 +40,7 @@ table_construct <- function(X, Z) {
 }
 
 #' @importFrom spatstat.geom area
-hatc0 <- function(info_dt, X, Z, r, b){
+hatc0 <- function(info_dt, X, Z, r, b, divisor){
   N_tau <- Z$n
   lambda <- X$n/area(X$window)
 
@@ -52,7 +52,12 @@ hatc0 <- function(info_dt, X, Z, r, b){
   # 2*pi*r ud med dist nedenfor. Førstenævnte giver dog et estimat i tråd med
   # forventningen, mens sidstenævnte ikke gør.
   # info_dt[,X_sum_terms:=(k*e)/(lambda*(2*pi*r))]
-  info_dt[,X_sum_terms:=Z_v*(k*e)/(lambda*(2*pi*r))]
+  if(divisor == "r"){
+    info_dt[,X_sum_terms:=Z_v*(k*e)/(lambda*(2*pi*r))]
+  }
+  if(divisor == "dist"){
+    info_dt[,X_sum_terms:=Z_v*(k*e)/(lambda*(2*pi*dist))]
+  }
   # info_sum <- info_dt[,.(sum_terms = sum(Z_v*X_sum_terms)), list(v_x, v_y)]
   # c0 <- sum(info_sum$sum_terms)/N_tau
   c0 <- sum(info_dt$X_sum_terms)/N_tau
@@ -60,7 +65,7 @@ hatc0 <- function(info_dt, X, Z, r, b){
 }
 
 #' @importFrom EstimationTools gauss_quad
-Mise_est <- function(info_dt, X, Z, b, R) {
+Mise_est <- function(info_dt, X, Z, b, R, divisor) {
   info_dt_R <- info_dt[dist < R]
   info_dt_R <- info_dt_R[order(dist)]
   N_tau <- Z$n
@@ -95,7 +100,7 @@ Mise_est <- function(info_dt, X, Z, b, R) {
 
   # Quadrature for term 1
   hatc <- function(info_dt, X, Z, r, b) {
-    sapply(r, function(x) hatc0(info_dt, X, Z, x, b))
+    sapply(r, function(x) hatc0(info_dt, X, Z, x, b, divisor))
   }
 
   hatcsq <- function(r) {
@@ -111,8 +116,8 @@ Mise_est <- function(info_dt, X, Z, b, R) {
   return(Mise_term1 - 2 * Mise_term2)
 }
 
-bandwidth_selection_optim <- function(info_dt, X, Z, R, b_init = NULL) {
-  MISE_est_fct <- function(b) Mise_est(info_dt, X, Z, b = b, R)
+bandwidth_selection_optim <- function(info_dt, X, Z, R, b_init = NULL, divisor) {
+  MISE_est_fct <- function(b) Mise_est(info_dt, X, Z, b = b, R, divisor)
   # MISE_est_fct <- function(b) Mise_est(info_dt, X, Z, b = expit_R(b, R), R)
 
   if (!is.null(b_init)) {
@@ -137,7 +142,7 @@ bandwidth_selection_optim <- function(info_dt, X, Z, R, b_init = NULL) {
 
 bandwidth_selection_grid <- function(info_dt, X, Z, R, grid) {
   stopifnot(class(grid) %in% c("numeric", "double", "integer"))
-  grid_search <- lapply(grid, function(b) Mise_est(info_dt, X, Z, b, R))
+  grid_search <- lapply(grid, function(b) Mise_est(info_dt, X, Z, b, R, divisor))
   grid_search <- unlist(grid_search)
   best_idx <- which.min(grid_search)
   grid[best_idx]
@@ -161,11 +166,13 @@ bandwidth_selection_grid <- function(info_dt, X, Z, R, grid) {
 #' is found with numeric optimsation optimised. Using grid can sometimes save
 #' considerable computational resources, but unless this is relevant consideration,
 #' it is recommended to leave grid = NULL.
+#' @param divisor Option to choose if r or ||u-v|| should be used in the divisor.
+#' In the former case set divisor = "r", and in the latter case set divisor = "dist".
 #' @return Returns a list containing the estimated covariances (c0), the
 #' distances at which the covariances are estimated (r), and the selected
 #' bandwidth (b).
 #' @export
-SpatCovarEst <- function(X, Z, R, r, b_init = NULL, grid = NULL) {
+SpatCovarEst <- function(X, Z, R, r, b_init = NULL, grid = NULL, divisor = "r") {
   if (class(X) != "ppp" | class(Z) != "ppp") {
     stop("X and Z must be a spatstat ppp class")
   }
@@ -190,17 +197,54 @@ SpatCovarEst <- function(X, Z, R, r, b_init = NULL, grid = NULL) {
     }
   }
 
+  if(!(divisor %in% c("r", "dist"))){
+    stop("Argument divisor must be 'r' or 'dist'.")
+  }
+
   info_dt <- table_construct(X, Z)
   if (is.null(grid)) {
-    b <- bandwidth_selection_optim(info_dt, X, Z, R, b_init)
+    b <- bandwidth_selection_optim(info_dt, X, Z, R, b_init, divisor)
   } else {
-    b <- bandwidth_selection_grid(info_dt, X, Z, R, grid)
+    b <- bandwidth_selection_grid(info_dt, X, Z, R, grid, divisor)
   }
   if (length(r) == 1) {
-    c0 <- hatc0(info_dt, X, Z, r, b)
+    c0 <- hatc0(info_dt, X, Z, r, b, divisor)
   }
   if (length(r) > 1) {
-    c0 <- sapply(r, function(x) hatc0(info_dt, X, Z, x, b))
+    c0 <- sapply(r, function(x) hatc0(info_dt, X, Z, x, b, divisor))
+  }
+  out <- list(c0 = c0, r = r, b = b)
+}
+
+#' Estimates covariance between point pattern and spatial covariance with
+#' a kernel estimation procedure for a user-specified bandwidth.
+#' @param X A point pattern represented by a ppp object.
+#' @param Z The spatial covariate represented as a marked ppp object where the
+#' coordinates represents the spatial locations where the coviaraite is
+#' measured, and the marks represents the measured values.
+#' @param r Vector of distance(s) for which to esimate the spatial covariance.
+#' @param b The selected bandwidth.
+#' @param divisor Option to choose if r or ||u-v|| should be used in the divisor.
+#' In the former case set divisor = "r", and in the latter case set divisor = "dist".
+#' @return Returns a list containing the estimated covariances (c0), the
+#' distances at which the covariances are estimated (r), and the selected
+#' bandwidth (b).
+#' @export
+SpatCovarEstFixed <- function(X, Z, r, b, divisor = "r") {
+  if (class(X) != "ppp" | class(Z) != "ppp") {
+    stop("X and Z must be a spatstat ppp class")
+  }
+
+  if(!(divisor %in% c("r", "dist"))){
+    stop("Argument divisor must be 'r' or 'dist'.")
+  }
+
+  info_dt <- table_construct(X, Z)
+  if (length(r) == 1) {
+    c0 <- hatc0(info_dt, X, Z, r, b, divisor)
+  }
+  if (length(r) > 1) {
+    c0 <- sapply(r, function(x) hatc0(info_dt, X, Z, x, b, divisor))
   }
   out <- list(c0 = c0, r = r, b = b)
 }
