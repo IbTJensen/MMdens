@@ -2,6 +2,10 @@
 # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
 
 Index_selection <- function(A, b) {
-    .Call('_MMdens_Index_selection', PACKAGE = 'MMdens', A, b)
+    .Call(`_MMdens_Index_selection`, A, b)
+}
+
+compute_c0_cpp <- function(dist, Z_v, e, lambda, b, N_tau) {
+    .Call(`_MMdens_compute_c0_cpp`, dist, Z_v, e, lambda, b, N_tau)
 }
 

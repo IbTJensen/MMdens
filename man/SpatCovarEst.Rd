@@ -6,7 +6,16 @@
 a kernel estimation procedure. Bandwidth selection is employed to selecet
 the optimal bandwidth.}
 \usage{
-SpatCovarEst(X, Z, R, r, b_init = NULL, grid = NULL, divisor = "r")
+SpatCovarEst(
+  X,
+  Z,
+  R,
+  r,
+  b_init = NULL,
+  grid = NULL,
+  divisor = "r",
+  fast = TRUE
+)
 }
 \arguments{
 \item{X}{A point pattern represented by a ppp object.}
@@ -32,6 +41,9 @@ it is recommended to leave grid = NULL.}
 
 \item{divisor}{Option to choose if r or ||u-v|| should be used in the divisor.
 In the former case set divisor = "r", and in the latter case set divisor = "dist".}
+
+\item{fast}{Should the leave-one-out cross-validation use a fast approximation? 
+True by default.}
 }
 \value{
 Returns a list containing the estimated covariances (c0), the

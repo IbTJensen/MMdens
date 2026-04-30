@@ -21,7 +21,6 @@ NULL
 #' @importFrom data.table data.table setcolorder
 #' @importFrom spatstat.explore edge.Ripley
 table_construct <- function(X, Z) {
-  N_tau_W <- Z$n
   Neighbours <- crosspairs(X, Z, rmax = Inf)
   Z_dt <- data.table(v_x = Z$x, v_y = Z$y, Z_v = Z$marks)
   info_dt <- data.table(
@@ -33,9 +32,11 @@ table_construct <- function(X, Z) {
   )
   info_dt <- merge(info_dt, Z_dt, by = c("v_x", "v_y"))
   setcolorder(info_dt, c("u_x", "u_y", "v_x", "v_y", "Z_v", "dist"))
-  info_dt[,
-    e := edge.Ripley(X = ppp(x = v_x, y = v_y, window = X$window), r = dist)
-  ]
+  suppressWarnings(
+    info_dt[,
+      e := edge.Ripley(X = ppp(x = v_x, y = v_y, window = X$window), r = dist)
+    ]
+  )
   return(info_dt)
 }
 
@@ -65,38 +66,63 @@ hatc0 <- function(info_dt, X, Z, r, b, divisor){
 }
 
 #' @importFrom EstimationTools gauss_quad
-Mise_est <- function(info_dt, X, Z, b, R, divisor) {
+Mise_est <- function(info_dt, X, Z, b, R, divisor, fast) {
   info_dt_R <- info_dt[dist < R]
   info_dt_R <- info_dt_R[order(dist)]
   N_tau <- Z$n
   lambda <- X$n / area(X$window)
 
-  idx_dist_pairs <- Index_selection(as.matrix(info_dt_R[, c(1:4, 6)]), b)
-  idx_dist_pairs <- lapply(1:length(idx_dist_pairs), function(i) {
-    list(dist = info_dt_R$dist[i], idx = idx_dist_pairs[[i]])
-  })
+  if (fast == FALSE) {
+    # Extracting the indicies in info_dt_R relevant for the sum used to estimate c_0^-(u,v)(||u-v||)
+    idx_dist_pairs <- Index_selection(as.matrix(info_dt_R[, c(1:4, 6)]), b)
+    idx_dist_pairs <- lapply(1:length(idx_dist_pairs), function(i) {
+      list(dist = info_dt_R$dist[i], idx = idx_dist_pairs[[i]])
+    })
 
-  # Caluclate the terms in the sum to estimate c0 for each dist
-  c0_sum_terms <- lapply(
-    idx_dist_pairs,
-    function(x) {
-      info_dt_R$Z_v[x$idx] *
-        k_b(x$dist - info_dt_R$dist[x$idx], b) *
-        info_dt_R$e[x$idx] /
-        (lambda * 2 * pi * x$dist)
-    }
-  )
-  rm(idx_dist_pairs)
-  gc()
+    # Caluclate the terms in the sum to estimate c0^-(u,v)(dist) for each dist
+    c0_sum_terms <- lapply(
+      idx_dist_pairs,
+      function(x) {
+        info_dt_R$Z_v[x$idx] *
+          k_b(x$dist - info_dt_R$dist[x$idx], b) *
+          info_dt_R$e[x$idx] /
+          (lambda * 2 * pi * x$dist)
+      }
+    )
+    rm(idx_dist_pairs)
+    gc()
 
-  # sum over all terms to esimate c0^-(u,v)(||u-v||) for every point-pair (u,v)
-  c0_cv_list <- lapply(c0_sum_terms, sum)
-  c0_cv <- unlist(c0_cv_list) / N_tau
-  rm(c0_sum_terms)
-  gc()
+    # sum over all terms to esimate c0^-(u,v)(||u-v||) for every point-pair (u,v)
+    c0_cv_list <- lapply(c0_sum_terms, sum)
+    c0_cv <- unlist(c0_cv_list) / N_tau
+    rm(c0_sum_terms)
+    gc()
 
-  info_dt_R[, c0_cv := c0_cv]
-  Mise_term2 <- sum(info_dt_R$Z_v * info_dt_R$e * info_dt_R$c0_cv / lambda) / N_tau
+    info_dt_R[, c0_cv := c0_cv]
+    Mise_term2 <- sum(info_dt_R$Z_v * info_dt_R$e * info_dt_R$c0_cv / lambda) /
+      N_tau
+  }
+
+  # Alternative for term 2
+  if (fast == TRUE) {
+    c0 <- compute_c0_cpp(
+      dist = info_dt_R$dist,
+      Z_v = info_dt_R$Z_v,
+      e = info_dt_R$e,
+      lambda = lambda,
+      b = b,
+      N_tau = N_tau
+    )
+
+    info_dt_R[, c0 := c0]
+    info_dt_R[,
+      c0_cv := 1 /
+        (N_tau - 1) *
+        (N_tau * c0 - Z_v * k_b(0, b) * e / (2 * pi * dist * lambda))
+    ]
+    Mise_term2 <- sum(info_dt_R$Z_v * info_dt_R$e * info_dt_R$c0_cv / lambda) /
+      N_tau
+  }
 
   # Quadrature for term 1
   hatc <- function(info_dt, X, Z, r, b) {
@@ -116,8 +142,8 @@ Mise_est <- function(info_dt, X, Z, b, R, divisor) {
   return(Mise_term1 - 2 * Mise_term2)
 }
 
-bandwidth_selection_optim <- function(info_dt, X, Z, R, b_init = NULL, divisor) {
-  MISE_est_fct <- function(b) Mise_est(info_dt, X, Z, b = b, R, divisor)
+bandwidth_selection_optim <- function(info_dt, X, Z, R, b_init = NULL, divisor, fast) {
+  MISE_est_fct <- function(b) Mise_est(info_dt, X, Z, b = b, R, divisor, fast)
   # MISE_est_fct <- function(b) Mise_est(info_dt, X, Z, b = expit_R(b, R), R)
 
   if (!is.null(b_init)) {
@@ -140,9 +166,9 @@ bandwidth_selection_optim <- function(info_dt, X, Z, R, b_init = NULL, divisor) 
   }
 }
 
-bandwidth_selection_grid <- function(info_dt, X, Z, R, grid) {
+bandwidth_selection_grid <- function(info_dt, X, Z, R, grid, fast) {
   stopifnot(class(grid) %in% c("numeric", "double", "integer"))
-  grid_search <- lapply(grid, function(b) Mise_est(info_dt, X, Z, b, R, divisor))
+  grid_search <- lapply(grid, function(b) Mise_est(info_dt, X, Z, b, R, divisor, fast))
   grid_search <- unlist(grid_search)
   best_idx <- which.min(grid_search)
   grid[best_idx]
@@ -168,11 +194,13 @@ bandwidth_selection_grid <- function(info_dt, X, Z, R, grid) {
 #' it is recommended to leave grid = NULL.
 #' @param divisor Option to choose if r or ||u-v|| should be used in the divisor.
 #' In the former case set divisor = "r", and in the latter case set divisor = "dist".
+#' @param fast Should the leave-one-out cross-validation use a fast approximation? 
+#' True by default.
 #' @return Returns a list containing the estimated covariances (c0), the
 #' distances at which the covariances are estimated (r), and the selected
 #' bandwidth (b).
 #' @export
-SpatCovarEst <- function(X, Z, R, r, b_init = NULL, grid = NULL, divisor = "r") {
+SpatCovarEst <- function(X, Z, R, r, b_init = NULL, grid = NULL, divisor = "r", fast = TRUE) {
   if (class(X) != "ppp" | class(Z) != "ppp") {
     stop("X and Z must be a spatstat ppp class")
   }
@@ -203,9 +231,9 @@ SpatCovarEst <- function(X, Z, R, r, b_init = NULL, grid = NULL, divisor = "r") 
 
   info_dt <- table_construct(X, Z)
   if (is.null(grid)) {
-    b <- bandwidth_selection_optim(info_dt, X, Z, R, b_init, divisor)
+    b <- bandwidth_selection_optim(info_dt, X, Z, R, b_init, divisor, fast)
   } else {
-    b <- bandwidth_selection_grid(info_dt, X, Z, R, grid, divisor)
+    b <- bandwidth_selection_grid(info_dt, X, Z, R, grid, divisor, fast)
   }
   if (length(r) == 1) {
     c0 <- hatc0(info_dt, X, Z, r, b, divisor)

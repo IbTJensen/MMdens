@@ -22,9 +22,26 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// compute_c0_cpp
+NumericVector compute_c0_cpp(NumericVector dist, NumericVector Z_v, NumericVector e, double lambda, double b, double N_tau);
+RcppExport SEXP _MMdens_compute_c0_cpp(SEXP distSEXP, SEXP Z_vSEXP, SEXP eSEXP, SEXP lambdaSEXP, SEXP bSEXP, SEXP N_tauSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type dist(distSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type Z_v(Z_vSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type e(eSEXP);
+    Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
+    Rcpp::traits::input_parameter< double >::type b(bSEXP);
+    Rcpp::traits::input_parameter< double >::type N_tau(N_tauSEXP);
+    rcpp_result_gen = Rcpp::wrap(compute_c0_cpp(dist, Z_v, e, lambda, b, N_tau));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_MMdens_Index_selection", (DL_FUNC) &_MMdens_Index_selection, 2},
+    {"_MMdens_compute_c0_cpp", (DL_FUNC) &_MMdens_compute_c0_cpp, 6},
     {NULL, NULL, 0}
 };
 
