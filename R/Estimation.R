@@ -200,7 +200,7 @@ bandwidth_selection_grid <- function(info_dt, X, Z, R, grid, fast) {
 #' distances at which the covariances are estimated (r), and the selected
 #' bandwidth (b).
 #' @export
-SpatCovarEst <- function(X, Z, R, r, b_init = NULL, grid = NULL, divisor = "r", fast = TRUE) {
+SpatCovarEst <- function(X, Z, R, r, b_init = NULL, grid = NULL, divisor = "dist", fast = TRUE) {
   if (class(X) != "ppp" | class(Z) != "ppp") {
     stop("X and Z must be a spatstat ppp class")
   }
