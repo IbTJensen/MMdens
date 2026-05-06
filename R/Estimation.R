@@ -53,11 +53,11 @@ hatc0 <- function(info_dt, X, Z, r, b, divisor){
   # 2*pi*r ud med dist nedenfor. Førstenævnte giver dog et estimat i tråd med
   # forventningen, mens sidstenævnte ikke gør.
   # info_dt[,X_sum_terms:=(k*e)/(lambda*(2*pi*r))]
-  if(divisor == "r"){
-    info_dt[,X_sum_terms:=Z_v*(k*e)/(lambda*(2*pi*r))]
+  if (divisor == "r") {
+    info_dt[, X_sum_terms := Z_v * (k * e) / (lambda * (2 * pi * r))]
   }
-  if(divisor == "dist"){
-    info_dt[,X_sum_terms:=Z_v*(k*e)/(lambda*(2*pi*dist))]
+  if (divisor == "dist") {
+    info_dt[, X_sum_terms := Z_v * (k * e) / (lambda * (2 * pi * dist))]
   }
   # info_sum <- info_dt[,.(sum_terms = sum(Z_v*X_sum_terms)), list(v_x, v_y)]
   # c0 <- sum(info_sum$sum_terms)/N_tau
@@ -121,7 +121,7 @@ Mise_est <- function(info_dt, X, Z, b, R, divisor, fast) {
         (N_tau * c0 - Z_v * k_b(0, b) * e / (2 * pi * dist * lambda))
     ]
     Mise_term2 <- sum(info_dt_R$Z_v * info_dt_R$e * info_dt_R$c0_cv / lambda) /
-      N_tau
+      (2 * pi * N_tau)
   }
 
   # Quadrature for term 1
