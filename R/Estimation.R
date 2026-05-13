@@ -142,24 +142,34 @@ Mise_est <- function(info_dt, X, Z, b, R, divisor, fast) {
   return(Mise_term1 - 2 * Mise_term2)
 }
 
-bandwidth_selection_optim <- function(info_dt, X, Z, R, b_init = NULL, divisor, fast) {
+bandwidth_selection_optim <- function(info_dt, X, Z, R, b_init = NULL, blimit=NULL, divisor, fast) {
   MISE_est_fct <- function(b) Mise_est(info_dt, X, Z, b = b, R, divisor, fast)
   # MISE_est_fct <- function(b) Mise_est(info_dt, X, Z, b = expit_R(b, R), R)
+
+  if (is.null(blimit)){
+    blower=0
+    bupper=R
+    }  else {
+      blower=blimit[1]
+      bupper=blimit[2]
+      if (binit<blower | binit>bupper) 
+        stop("binit not in specified interval for b")
+    }  
 
   if (!is.null(b_init)) {
     O <- optim(
       par = b_init,
       # par = ifelse(is.null(b_init), 0, b_init), # Note that logit_R(0) = R/2
       fn = MISE_est_fct,
-      lower = 0,
-      upper = R,
+      lower = blower,
+      upper = bupper,
       method = "Brent"
     )
     return(O$par)
   } else {
     O <- optimise(
       f = MISE_est_fct,
-      interval = c(0, R),
+      interval = c(blower, bupper),
       maximum = FALSE
     )
     return(O$minimum)
@@ -187,6 +197,7 @@ bandwidth_selection_grid <- function(info_dt, X, Z, R, grid, fast) {
 #' @param r Vector of distance(s) for which to esimate the spatial covariance.
 #' @param b_init Initial value for optimisation of the bandwidth. If left empty,
 #' R/2 is used. If Grid is non-NULL, b_init should be left as NULL.
+#' @param blimit Search interval for b. If NULL, MISE is minimized over b in [0,R].                        
 #' @param grid Grid to evaulate the MISE over. The bandwidth with the lowest MISE
 #' will then be selected for the mixed moment estimator. If set to NULL the MISE
 #' is found with numeric optimsation optimised. Using grid can sometimes save
@@ -200,7 +211,7 @@ bandwidth_selection_grid <- function(info_dt, X, Z, R, grid, fast) {
 #' distances at which the covariances are estimated (r), and the selected
 #' bandwidth (b).
 #' @export
-SpatCovarEst <- function(X, Z, R, r, b_init = NULL, grid = NULL, divisor = "dist", fast = TRUE) {
+SpatCovarEst <- function(X, Z, R, r, b_init = NULL, blimit=NULL, rid = NULL, divisor = "dist", fast = TRUE) {
   if (class(X) != "ppp" | class(Z) != "ppp") {
     stop("X and Z must be a spatstat ppp class")
   }
