@@ -132,7 +132,7 @@ NumericVector compute_c0_cpp(NumericVector dist,
         Z_v[j] *
         kernel_val *
         e[j] /
-        (lambda * two_pi * dist[i]);
+        (lambda * two_pi * dist[j]);
     }
 
     c0[i] = sum_terms / N_tau;
