@@ -14,7 +14,6 @@ Description: More about what it does (maybe more than one line).
 License: gpl-3
 Encoding: UTF-8
 LazyData: true
-RoxygenNote: 7.3.3
 LinkingTo: 
     Rcpp
 Imports: 
@@ -22,3 +21,4 @@ Imports:
     data.table (>= 1.9.8),
     spatstat,
     EstimationTools
+Config/roxygen2/version: 8.0.0
