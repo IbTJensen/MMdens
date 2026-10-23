@@ -60,7 +60,7 @@ MISE_est_fixedb <- function(X, Z, Rmin,R, b, fast = TRUE,mise1=TRUE) {
     stop("X and Z must be a spatstat ppp class")
   }
 
-  info_dt <- MMdens:::table_construct(X, Z,R+b)#RW up to R+b
+  info_dt <- table_construct(X, Z,R+b)#RW up to R+b
 
   mise=Mise_est(info_dt,X,Z,b,Rmin,R,fast,mise1)
 
@@ -75,7 +75,7 @@ Mise_est <- function(info_dt, X, Z, b, Rmin,R, fast, mise1,ntrapeznodes=400) {
 
   if (fast == FALSE) {
     # Extracting the indicies in info_dt_R relevant for the sum used to estimate c_0^-(u,v)(||u-v||)
-    idx_dist_pairs <- MMdens:::Index_selection(as.matrix(info_dt_R[, c(1:4, 6)]), b)
+    idx_dist_pairs <- Index_selection(as.matrix(info_dt_R[, c(1:4, 6)]), b)
     idx_dist_pairs <- lapply(1:length(idx_dist_pairs), function(i) {
       list(dist = info_dt_R$dist[i], idx = idx_dist_pairs[[i]])
     })
@@ -85,7 +85,7 @@ Mise_est <- function(info_dt, X, Z, b, Rmin,R, fast, mise1,ntrapeznodes=400) {
       idx_dist_pairs,
       function(x) {
         info_dt_R$Z_v[x$idx] *
-          MMdens:::k_b(x$dist - info_dt_R$dist[x$idx], b) *
+          k_b(x$dist - info_dt_R$dist[x$idx], b) *
           info_dt_R$e[x$idx] /(lambda * 2 * pi * info_dt_R$dist[x$idx])
       }
     )
@@ -105,7 +105,7 @@ Mise_est <- function(info_dt, X, Z, b, Rmin,R, fast, mise1,ntrapeznodes=400) {
 
   # Fast alternative for term 2
   if (fast == TRUE) {
-    c0 <- MMdens:::compute_c0_cpp( #compute \hat c_0(\|u-v\|)
+    c0 <- compute_c0_cpp( #compute \hat c_0(\|u-v\|)
       dist = info_dt_R$dist,
       Z_v = info_dt_R$Z_v,
       e = info_dt_R$e,
@@ -117,7 +117,7 @@ Mise_est <- function(info_dt, X, Z, b, Rmin,R, fast, mise1,ntrapeznodes=400) {
     info_dt_R[, c0 := c0]
     info_dt_R[,
       c0_cv :=
-        (N_tau * c0 - Z_v * MMdens:::k_b(0, b) * e / (2 * pi * dist * lambda))/(N_tau-1)
+        (N_tau * c0 - Z_v * k_b(0, b) * e / (2 * pi * dist * lambda))/(N_tau-1)
       ]
     Mise_term2 <- sum((info_dt_R$dist>Rmin & info_dt_R$dist<R)*info_dt_R$Z_v * info_dt_R$e * info_dt_R$c0_cv /(lambda*info_dt_R$dist))/(2*pi* N_tau)
   }
