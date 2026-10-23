@@ -2,6 +2,7 @@
 
 export(SpatCovarEst)
 export(SpatCovarEstFixed)
+export(MISE_est_fixedb)
 importFrom(Rcpp,sourceCpp)
 importFrom(data.table,data.table)
 importFrom(data.table,setcolorder)
