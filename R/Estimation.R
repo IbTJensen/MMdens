@@ -55,93 +55,87 @@ hatc0 <- function(info_dt, X, Z, r, b){
   return(c0)
 }
 
-Mise_est <- function(info_dt, X, Z, b, R, fast) {
-  info_dt_R <- info_dt[dist < R]
+MISE_est_fixedb <- function(X, Z, Rmin,R, b, fast = TRUE,mise1=TRUE) {
+  if (class(X) != "ppp" | class(Z) != "ppp") {
+    stop("X and Z must be a spatstat ppp class")
+  }
+
+  info_dt <- MMdens:::table_construct(X, Z,R+b)#RW up to R+b
+
+  mise=Mise_est(info_dt,X,Z,b,Rmin,R,fast,mise1)
+
+  return(mise)
+}
+
+Mise_est <- function(info_dt, X, Z, b, Rmin,R, fast, mise1,ntrapeznodes=400) {
+  info_dt_R <- info_dt[dist < R+b]#ntrapeznodes: number of cutpoints for trapezoidal quadrature
   info_dt_R <- info_dt_R[order(dist)]
   N_tau <- Z$n
-  lambda <- X$n / spatstat.geom::area(X$window)
+  lambda <- X$n / area(X$window)
 
   if (fast == FALSE) {
     # Extracting the indicies in info_dt_R relevant for the sum used to estimate c_0^-(u,v)(||u-v||)
-    idx_dist_pairs <- Index_selection(as.matrix(info_dt_R[, c(1:4, 6)]), b)
+    idx_dist_pairs <- MMdens:::Index_selection(as.matrix(info_dt_R[, c(1:4, 6)]), b)
     idx_dist_pairs <- lapply(1:length(idx_dist_pairs), function(i) {
       list(dist = info_dt_R$dist[i], idx = idx_dist_pairs[[i]])
     })
 
-    # Caluclate the terms in the sum to estimate c0^-(u,v)(dist) for each dist
+    # Calculate the terms in the sum to estimate c0^-(u,v)(dist) for each dist
     c0_sum_terms <- lapply(
       idx_dist_pairs,
       function(x) {
         info_dt_R$Z_v[x$idx] *
-          k_b(x$dist - info_dt_R$dist[x$idx], b) *
-          info_dt_R$e[x$idx] /
-          (lambda * 2 * pi * x$dist)
+          MMdens:::k_b(x$dist - info_dt_R$dist[x$idx], b) *
+          info_dt_R$e[x$idx] /(lambda * 2 * pi * info_dt_R$dist[x$idx])
       }
     )
     rm(idx_dist_pairs)
     gc()
 
-    # sum over all terms to esimate c0^-(u,v)(||u-v||) for every point-pair (u,v)
-    c0_cv_list <- lapply(c0_sum_terms, sum)
-    c0_cv <- unlist(c0_cv_list) / N_tau
-    rm(c0_sum_terms)
-    gc()
+    # sum over all terms to esimate c0^-(u,v)(||u-v||) for every point- pair (u,v)
+      c0_cv_list <- lapply(c0_sum_terms, sum)
+      c0_cv <- unlist(c0_cv_list) / (N_tau-1)
+      rm(c0_sum_terms)
+      gc()
+      
+      info_dt_R[, c0_cv := c0_cv]
 
-    info_dt_R[, c0_cv := c0_cv]
-    Mise_term2 <- sum(info_dt_R$Z_v * info_dt_R$e * info_dt_R$c0_cv / lambda) /
-      N_tau
+      Mise_term2 <- sum((info_dt_R$dist>Rmin & info_dt_R$dist<R)*info_dt_R$Z_v * info_dt_R$e * info_dt_R$c0_cv /(lambda*info_dt_R$dist))/(2*pi * N_tau)
   }
 
-  # Alternative for term 2
+  # Fast alternative for term 2
   if (fast == TRUE) {
-    c0 <- compute_c0_cpp(
+    c0 <- MMdens:::compute_c0_cpp( #compute \hat c_0(\|u-v\|)
       dist = info_dt_R$dist,
       Z_v = info_dt_R$Z_v,
       e = info_dt_R$e,
       lambda = lambda,
       b = b,
-      N_tau = N_tau
+      N_tau = N_tau 
     )
 
     info_dt_R[, c0 := c0]
     info_dt_R[,
-      c0_cv := 1 /
-        (N_tau - 1) *
-        (N_tau * c0 - Z_v * k_b(0, b) * e / (2 * pi * dist * lambda))
-    ]
-    Mise_term2 <- sum(info_dt_R$Z_v * info_dt_R$e * info_dt_R$c0_cv / lambda) /
-      (2 * pi * N_tau)
+      c0_cv :=
+        (N_tau * c0 - Z_v * MMdens:::k_b(0, b) * e / (2 * pi * dist * lambda))/(N_tau-1)
+      ]
+    Mise_term2 <- sum((info_dt_R$dist>Rmin & info_dt_R$dist<R)*info_dt_R$Z_v * info_dt_R$e * info_dt_R$c0_cv /(lambda*info_dt_R$dist))/(2*pi* N_tau)
   }
 
-  # Quadrature for term 1
-  # hatc <- function(info_dt, X, Z, r, b) {
-  #   sapply(r, function(x) hatc0(info_dt, X, Z, x, b, divisor))
-  # }
-
-  # hatcsq <- function(r) {
-  #   return(hatc(info_dt, X, Z, r, b)^2 * r)
-  # }
-
-  hatcsq <- function(r) {
-    c0 <- hatc0_cpp(
-      dist = info_dt_R$dist,
-      r = r,
-      Z_v = info_dt_R$Z_v,
-      e = info_dt_R$e,
-      lambda = lambda,
-      b = b,
-      N_tau = N_tau
-    )
+  #calculation of first MISE term if mise1=TRUE. Use trapezoidal rule.
+  if (mise1){
+      r=seq(0,R,len=ntrapeznodes)#knots for numerical integration.
+      c0 <- SpatCovarEstFixed(X,Z,r,b)$c0
+      nor=length(r)
+      include=(r>Rmin)
+      temp=c0^2*include
+      Mise_term1=0.5*sum(temp[1:(nor-1)]+temp[2:nor])*(r[2]-r[1])#RW change. Trapezoidal.
+  } else {
+      Mise_term1=0
   }
 
-
-  Mise_term1 <- EstimationTools::gauss_quad(
-    fun = hatcsq,
-    lower = 0,
-    upper = R
-  )
-
-  return(Mise_term1 - 2 * Mise_term2)
+  #return estimates of second and first terms.
+  return(c(Mise_term2,Mise_term1))
 }
 
 bandwidth_selection_optim <- function(
